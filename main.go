@@ -17,20 +17,18 @@ import (
 )
 
 const (
-	width  = 1080
+	width  = 1280
 	height = 720
 	title  = "Core"
 )
 
 var (
 	lightPositions = []mgl32.Vec3{
-		{0, 1, 3},
-		{0, 1, 3},
-		{0, 1, 0},
+		{1, 1, 0},
+		{-1, 1, 0},
 	}
 	lightColors = []mgl32.Vec3{
-		{1, 0, 1},
-		{0, 1, 1},
+		{1, 1, 0.7},
 		{1, 1, 0.7},
 	}
 )
@@ -172,6 +170,10 @@ func programLoop(window *win.Window) error {
 	sourceObjectColorUL := sourceProgram.GetUniformLocation("objectColor")
 	//sourceTextureUL := sourceProgram.GetUniformLocation("texSampler")
 
+	modelModelUL := modelProgram.GetUniformLocation("model")
+	modelViewUL := modelProgram.GetUniformLocation("view")
+	modelProjectUL := modelProgram.GetUniformLocation("projection")
+
 	// creates camara
 	eye := mgl32.Vec3{0, 1.5, 5}
 	center := mgl32.Vec3{0, 0, 0}
@@ -266,18 +268,20 @@ func programLoop(window *win.Window) error {
 		gl.BindVertexArray(lightVAO)
 		for i, lp := range lightPositions {
 			lightTransform := model
-			if i > 1 {
-				lightTransform = model.Mul4(mgl32.Translate3D(lp.Elem())).Mul4(mgl32.Scale3D(0.2, 0.2, 0.2))
-			} else {
-				lightTransform = model.Mul4(mgl32.Translate3D(lp.Elem())).Mul4(mgl32.Scale3D(0.05, 0.05, 0.05))
-			}
+			lightTransform = model.Mul4(mgl32.Translate3D(lp.Elem())).Mul4(mgl32.Scale3D(0.2, 0.2, 0.2))
 			gl.Uniform3f(sourceObjectColorUL, lightColors[i].X(), lightColors[i].Y(), lightColors[i].Z())
 			gl.UniformMatrix4fv(sourceModelUL, 1, false, &lightTransform[0])
 			gl.DrawElements(gl.TRIANGLES, int32(xLightSegments*yLighteSegments)*6, gl.UNSIGNED_INT, unsafe.Pointer(nil))
 		}
 		gl.BindVertexArray(0)
 
+		modelProgram.Use()
+		gl.UniformMatrix4fv(modelViewUL, 1, false, &camera[0])
+		gl.UniformMatrix4fv(modelProjectUL, 1, false, &projection[0])
+		modelTransform := model.Mul4(mgl32.Translate3D(0, 0, 0)).Mul4(mgl32.Scale3D(0.5, 0.5, 0.5))
+		gl.UniformMatrix4fv(modelModelUL, 1, false, &modelTransform[0])
 		modelObj.Draw(modelProgram.Get())
+		gl.BindVertexArray(0)
 	}
 
 	return nil
