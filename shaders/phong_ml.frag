@@ -4,7 +4,6 @@ out vec4 FragColor;
 
 struct PointLight {
     vec3 position;
-    
     float constant;
     float linear;
     float quadratic;
@@ -21,12 +20,13 @@ struct PointLight {
 in vec3 FragPos;
 in vec3 Normal;
 in vec2 TexCoord;
+in mat3 TBN;
 
 uniform int numLights;
 uniform vec3 objectColor;
 uniform vec3 viewPos;
-uniform sampler2D texSampler0;
-uniform sampler2D texSampler1;
+uniform sampler2D texture_diffuse1;
+uniform sampler2D texture_normal1;
 uniform PointLight pointLights[NR_POINT_LIGHTS];
 
 
@@ -38,7 +38,16 @@ vec3 CalcPointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir);
 void main()
 {    
     // properties
-    vec3 norm = normalize(Normal);
+    vec3 norm;
+    if (textureSize(texture_normal1, 0).x > 1){
+        norm = normalize(texture(texture_normal1, TexCoord).rgb * 2.0 - 1.0);
+        norm = normalize(TBN * norm);
+    }
+    else {
+        norm = normalize(Normal);
+    }
+
+    
     vec3 viewDir = normalize(viewPos - FragPos);
     
     // == =====================================================
@@ -55,12 +64,8 @@ void main()
     // phase 3: spot light
    // result += CalcSpotLight(spotLight, norm, FragPos, viewDir);
     result = result * objectColor;
-    if (textureSize(texSampler0, 0).x > 1){
-        if (textureSize(texSampler1, 0).x > 1){
-            FragColor = mix(texture(texSampler1, TexCoord), texture(texSampler0, TexCoord), 0.5) * vec4(result, 1.0f);
-        }else {
-            FragColor = texture(texSampler0, TexCoord) * vec4(result, 1.0);
-        }
+    if (textureSize(texture_diffuse1, 0).x > 1){
+            FragColor = texture(texture_diffuse1, TexCoord) * vec4(result, 1.0);
     }
     else {
         FragColor = vec4(result, 1.0);

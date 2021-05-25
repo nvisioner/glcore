@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"unsafe"
 
+	"github.com/nvisioner/glutils/cam"
 	"github.com/nvisioner/glutils/gfx"
 	"github.com/nvisioner/glutils/models"
 	"github.com/nvisioner/glutils/primitives"
@@ -24,8 +25,8 @@ const (
 
 var (
 	lightPositions = []mgl32.Vec3{
-		{1, 1, 0},
-		{-1, 1, 0},
+		{5, 1, -4},
+		{5, 1, 4},
 	}
 	lightColors = []mgl32.Vec3{
 		{1, 1, 0.7},
@@ -127,23 +128,6 @@ func programLoop(window *win.Window) error {
 	}
 	defer sourceProgram.Delete()
 
-	modelVS, err := gfx.NewShaderFromFile("shaders/shader.vert", gl.VERTEX_SHADER)
-	if err != nil {
-		return err
-	}
-
-	modelFS, err := gfx.NewShaderFromFile("shaders/shader.frag", gl.FRAGMENT_SHADER)
-	if err != nil {
-		return err
-	}
-
-	// special shader program so that lights themselves are not affected by lighting
-	modelProgram, err := gfx.NewProgram(modelVS, modelFS)
-	if err != nil {
-		return err
-	}
-	defer sourceProgram.Delete()
-
 	// Ensure that triangles that are "behind" others do not draw over top of them
 	gl.Enable(gl.DEPTH_TEST)
 	gl.DepthFunc(gl.LESS)
@@ -160,8 +144,7 @@ func programLoop(window *win.Window) error {
 	objectColorUL := program.GetUniformLocation("objectColor")
 	viewPosUL := program.GetUniformLocation("viewPos")
 	numLightsUL := program.GetUniformLocation("numLights")
-	texture0UL := program.GetUniformLocation("texSampler0")
-	//texture1UL := program.GetUniformLocation("texSampler1")
+	textureUL := program.GetUniformLocation("texture_diffuse1")
 	pointLightsUL := pointLightsUL(program)
 
 	sourceModelUL := sourceProgram.GetUniformLocation("model")
@@ -170,21 +153,16 @@ func programLoop(window *win.Window) error {
 	sourceObjectColorUL := sourceProgram.GetUniformLocation("objectColor")
 	//sourceTextureUL := sourceProgram.GetUniformLocation("texSampler")
 
-	modelModelUL := modelProgram.GetUniformLocation("model")
-	modelViewUL := modelProgram.GetUniformLocation("view")
-	modelProjectUL := modelProgram.GetUniformLocation("projection")
-
 	// creates camara
 	eye := mgl32.Vec3{0, 1.5, 5}
-	center := mgl32.Vec3{0, 0, 0}
-	camera := mgl32.LookAtV(eye, center, mgl32.Vec3{0, 1, 0})
+	camera := cam.NewFpsCamera(eye, mgl32.Vec3{0, -1, 0}, 90, 0, window.InputManager())
 
 	// creates perspective
 	fov := float32(60.0)
 	projection := mgl32.Perspective(mgl32.DegToRad(fov), float32(width)/height, 0.1, 100)
 
 	// Textures
-	planTexture, err := gfx.NewTextureFromFile("textures/floor.jpg",
+	planTexture, err := gfx.NewTextureFromFile("textures/snow.jpg",
 		gl.CLAMP_TO_EDGE, gl.CLAMP_TO_EDGE)
 	if err != nil {
 		panic(err.Error())
@@ -204,11 +182,11 @@ func programLoop(window *win.Window) error {
 	xLightSegments, yLighteSegments := 30, 30
 	lightVAO := createVAO(primitives.Sphere(xLightSegments, yLighteSegments))
 
-	xPlanSegments, yPlanSegments := 15, 15
+	xPlanSegments, yPlanSegments := 30, 30
 	planVAO := createVAO(primitives.Square(xPlanSegments, yPlanSegments, 1))
 
 	// model loading
-	modelObj, _ := models.NewModel("models/cyborg/", "cyborg.obj", false)
+	modelObj, _ := models.NewModel("./models/house/", "house.obj", false)
 
 	// Scene and animation always needs to be after the model and buffers initialization
 	animationCtl := gfx.NewAnimationManager()
@@ -225,11 +203,14 @@ func programLoop(window *win.Window) error {
 
 		// Scene update
 		animationCtl.Update()
+		camera.Update(window.SinceLastFrame())
+		eye = camera.GetPos()
 
 		// You shall draw here
 		program.Use()
 
-		gl.UniformMatrix4fv(viewUL, 1, false, &camera[0])
+		camTransform := camera.GetTransform()
+		gl.UniformMatrix4fv(viewUL, 1, false, &camTransform[0])
 		gl.UniformMatrix4fv(projectUL, 1, false, &projection[0])
 
 		gl.Uniform3fv(viewPosUL, 1, &eye[0])
@@ -239,21 +220,25 @@ func programLoop(window *win.Window) error {
 		//Lights
 		for index, pointLightPosition := range lightPositions {
 			gl.Uniform3fv(pointLightsUL[index][0], 1, &pointLightPosition[0])
-			gl.Uniform3f(pointLightsUL[index][1], 0.1, 0.1, 0.1)
+			gl.Uniform3f(pointLightsUL[index][1], 0.05, 0.05, 0.05)
 			gl.Uniform3f(pointLightsUL[index][2], 0.8, 0.8, 0.8)
-			gl.Uniform3f(pointLightsUL[index][3], 0.8, 0.8, 0.8)
-			gl.Uniform1f(pointLightsUL[index][4], 1.)
+			gl.Uniform3f(pointLightsUL[index][3], 1.0, 1.0, 1.0)
+			gl.Uniform1f(pointLightsUL[index][4], 1.0)
 			gl.Uniform1f(pointLightsUL[index][5], 0.09)
 			gl.Uniform1f(pointLightsUL[index][6], 0.032)
 			gl.Uniform3f(pointLightsUL[index][7], lightColors[index].X(), lightColors[index].Y(), lightColors[index].Z())
 		}
 
 		// render models
+		modelTransform := model.Mul4(mgl32.Translate3D(0, 0, 0)).Mul4(mgl32.Scale3D(0.7, 0.7, 0.7))
+		gl.UniformMatrix4fv(modelUL, 1, false, &modelTransform[0])
+		modelObj.Draw(program.Get())
+		gl.BindVertexArray(0)
 
 		//Plan
 		gl.BindVertexArray(planVAO)
 		planTexture.Bind(gl.TEXTURE0)
-		planTexture.SetUniform(texture0UL)
+		planTexture.SetUniform(textureUL)
 		gl.UniformMatrix4fv(modelUL, 1, false, &model[0])
 		gl.DrawElements(gl.TRIANGLES, int32(xPlanSegments*yPlanSegments)*6, gl.UNSIGNED_INT, unsafe.Pointer(nil))
 		planTexture.UnBind()
@@ -262,7 +247,7 @@ func programLoop(window *win.Window) error {
 		//Source program
 		sourceProgram.Use()
 		gl.UniformMatrix4fv(sourceProjectUL, 1, false, &projection[0])
-		gl.UniformMatrix4fv(sourceViewUL, 1, false, &camera[0])
+		gl.UniformMatrix4fv(sourceViewUL, 1, false, &camTransform[0])
 
 		//Light objects
 		gl.BindVertexArray(lightVAO)
@@ -273,14 +258,6 @@ func programLoop(window *win.Window) error {
 			gl.UniformMatrix4fv(sourceModelUL, 1, false, &lightTransform[0])
 			gl.DrawElements(gl.TRIANGLES, int32(xLightSegments*yLighteSegments)*6, gl.UNSIGNED_INT, unsafe.Pointer(nil))
 		}
-		gl.BindVertexArray(0)
-
-		modelProgram.Use()
-		gl.UniformMatrix4fv(modelViewUL, 1, false, &camera[0])
-		gl.UniformMatrix4fv(modelProjectUL, 1, false, &projection[0])
-		modelTransform := model.Mul4(mgl32.Translate3D(0, 0, 0)).Mul4(mgl32.Scale3D(0.5, 0.5, 0.5))
-		gl.UniformMatrix4fv(modelModelUL, 1, false, &modelTransform[0])
-		modelObj.Draw(modelProgram.Get())
 		gl.BindVertexArray(0)
 	}
 
