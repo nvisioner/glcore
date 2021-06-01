@@ -25,8 +25,8 @@ const (
 
 var (
 	lightPositions = []mgl32.Vec3{
-		{5, 1, -4},
-		{5, 1, 4},
+		{0, 1, 0},
+		{5, 1, 0},
 	}
 	lightColors = []mgl32.Vec3{
 		{1, 1, 0.7},
@@ -145,6 +145,7 @@ func programLoop(window *win.Window) error {
 	viewPosUL := program.GetUniformLocation("viewPos")
 	numLightsUL := program.GetUniformLocation("numLights")
 	textureUL := program.GetUniformLocation("texture_diffuse1")
+	angleUL := program.GetUniformLocation("angle")
 	pointLightsUL := pointLightsUL(program)
 
 	sourceModelUL := sourceProgram.GetUniformLocation("model")
@@ -208,6 +209,7 @@ func programLoop(window *win.Window) error {
 
 		// You shall draw here
 		program.Use()
+		gl.Uniform1f(angleUL, float32(animationCtl.GetAngle()))
 
 		camTransform := camera.GetTransform()
 		gl.UniformMatrix4fv(viewUL, 1, false, &camTransform[0])
